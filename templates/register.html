@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block title %}Register — CivicFix{% endblock %}{% block content %}
+<div class="container py-5" style="max-width:520px"><div class="cf-card cf-card-b"><h3>Create your account</h3><div id="err"></div>
+<form id="f" class="row g-2">
+<div class="col-6"><label class="form-label">First name</label><input class="form-control" name="first_name" required></div>
+<div class="col-6"><label class="form-label">Last name</label><input class="form-control" name="last_name"></div>
+<div class="col-12"><label class="form-label">Email</label><input class="form-control" type="email" name="email" required></div>
+<div class="col-12"><label class="form-label">Password (min 8 characters)</label><input class="form-control" type="password" name="password" minlength="8" required></div>
+<div class="col-6"><label class="form-label">Phone (optional)</label><input class="form-control" name="phone_number"></div>
+<div class="col-6"><label class="form-label">Ward (optional)</label><input class="form-control" name="ward"></div>
+<div class="col-12 form-check ms-1"><input class="form-check-input" type="checkbox" id="pol" required><label class="form-check-label small" for="pol">I accept the <a href="/privacy/" target="_blank">privacy policy</a>.</label></div>
+<div class="col-12"><button class="btn btn-primary w-100">Register</button></div></form></div></div>{% endblock %}
+{% block scripts %}<script>
+f.onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(f));d.accept_policy=pol.checked;
+ try{await CF.api('/auth/register/',{method:'POST',body:d});
+  const fd=new FormData();fd.append('email',d.email);fd.append('password',d.password);fd.append('csrfmiddlewaretoken',CF.cookie('csrftoken'));
+  const r=await fetch('/login/',{method:'POST',body:fd,credentials:'same-origin'});location='/dashboard/'}
+ catch(x){CF.alert(err,CF.errText(x))}};
+</script>{% endblock %}

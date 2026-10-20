@@ -1,0 +1,63 @@
+{% extends "base.html" %}{% block title %}Complaint — CivicFix{% endblock %}{% block content %}
+<div class="container py-4"><div id="err"></div><div id="page"><div class="text-muted">Loading…</div></div></div>
+<div class="modal fade" id="dlg" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="dt"></h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+<div class="modal-body"><textarea id="dtext" rows="3" class="form-control" placeholder="Comment / reason"></textarea><div id="dextra"></div></div>
+<div class="modal-footer"><button class="btn btn-primary" id="dok">Confirm</button></div></div></div></div>{% endblock %}
+{% block scripts %}<script>
+const ID={{ complaint_id }},ROLE="{{ role }}";let C,gm;
+const modal=new bootstrap.Modal(document.getElementById('dlg'));
+function ask(title,{evidence=false,fieldsHtml=''}={}){return new Promise(res=>{dt.textContent=title;dtext.value='';dextra.innerHTML=(evidence?'<label class="form-label mt-2 small">Resolution evidence photo (optional)</label><input type="file" id="evf" accept=".jpg,.jpeg,.png" class="form-control">':'')+fieldsHtml;modal.show();dok.onclick=()=>{modal.hide();res({text:dtext.value.trim(),file:evidence&&document.getElementById('evf')?document.getElementById('evf').files[0]:null})}})}
+const btn=(cls,label,fn,icon='')=>{const b=document.createElement('button');b.className='btn '+cls+' w-100 mb-2';b.innerHTML=(icon?`<i class="bi ${icon}"></i> `:'')+label;b.onclick=async()=>{try{await fn();await load()}catch(e){if(e&&e.data)CF.alert(err,CF.errText(e))}};return b};
+async function load(){err.innerHTML='';C=await CF.api('/complaints/'+ID+'/');render()}
+function render(){const A=C.available_actions,T=A.transitions,o=C.priority;
+ page.innerHTML=`<div class="row g-4"><div class="col-lg-8">
+ <div class="d-flex flex-wrap gap-2 align-items-center mb-1"><span class="text-muted">${CF.esc(C.complaint_number||'Draft')}</span>${CF.statusBadge(C.status)}${C.parent_complaint?`<a href="/complaints/${C.parent_complaint.id}/" class="badge bg-secondary text-decoration-none">Merged into ${CF.esc(C.parent_complaint.number)}</a>`:''}${C.merged_count?`<span class="badge bg-info text-dark">${C.merged_count} merged duplicate${C.merged_count>1?'s':''}</span>`:''}</div>
+ <h2>${CF.esc(C.title)}</h2><p style="white-space:pre-wrap">${CF.esc(C.description)}</p>
+ <div id="imgs" class="row g-2 mb-3">${C.images.map(i=>`<div class="col-6 col-md-4"><a href="${i.url}" target="_blank"><img src="${i.url}" class="img-fluid rounded border ${i.is_hidden?'opacity-25':''}" alt="${CF.esc(i.caption||'Complaint photo')}"></a><small class="text-muted d-block">${i.is_resolution_evidence?'<strong>Resolution evidence</strong> · ':''}${CF.esc(i.caption)} ${i.is_hidden?'(hidden)':''} ${A.can_admin?`<a href="#" class="hid" data-k="images" data-id="${i.id}" data-h="${i.is_hidden}">${i.is_hidden?'unhide':'hide'}</a>`:''}</small></div>`).join('')}</div>
+ <div id="map" class="map mb-3"></div>
+ <div class="row small mb-3"><div class="col-sm-4"><span class="text-muted">Category</span><br>${CF.esc(C.category?C.category.name:'—')}</div><div class="col-sm-4"><span class="text-muted">Ward</span><br>${CF.esc(C.location.ward||'—')}</div><div class="col-sm-4"><span class="text-muted">Landmark</span><br>${CF.esc(C.location.landmark||'—')}</div></div>
+ <div class="d-flex gap-2 mb-3"><button id="up" class="btn ${C.has_upvoted?'btn-primary':'btn-outline-primary'}" ${C.status==='DRAFT'?'disabled':''}><i class="bi bi-hand-thumbs-up"></i> Upvote <span class="badge bg-light text-dark">${C.upvotes}</span></button>
+ <button id="rep" class="btn btn-outline-secondary"><i class="bi bi-flag"></i> Report content</button></div>
+ <h5>Comments and updates</h5><div id="cm">${C.comments.map(m=>`<div class="p-2 mb-2 border rounded ${m.is_internal?'note-internal':'bg-white'} ${m.is_hidden?'opacity-50':''}"><div class="d-flex justify-content-between"><strong>${CF.esc(m.author)} <small class="text-muted">${CF.esc(m.author_role||'')}</small> ${m.is_internal?'<span class="badge bg-warning text-dark">Internal note</span>':''}</strong><small class="text-muted">${CF.ago(m.created_at)}</small></div>${CF.esc(m.text)}${A.can_admin?` <a href="#" class="hid" data-k="comments" data-id="${m.id}" data-h="${m.is_hidden}">${m.is_hidden?'unhide':'hide'}</a>`:''}</div>`).join('')||'<p class="text-muted">No comments yet.</p>'}</div>
+ ${A.can_comment?`<div class="mt-2"><textarea id="ct" rows="2" class="form-control" placeholder="Add a comment"></textarea><div class="d-flex gap-2 mt-2"><button id="cs" class="btn btn-primary btn-sm">Post comment</button>${A.can_internal_note?'<button id="ci" class="btn btn-outline-warning btn-sm">Add internal note</button>':''}</div></div>`:''}
+ </div><div class="col-lg-4"><div class="cf-card cf-card-b mb-3"><h6>Status &amp; priority</h6><dl class="row small mb-0">
+ <dt class="col-5">Status</dt><dd class="col-7">${CF.statusBadge(C.status)}</dd><dt class="col-5">Priority</dt><dd class="col-7">${CF.prioBadge(o.level)} ${o.score}/100${o.overridden?' <small>(overridden)</small>':''}</dd>
+ <dt class="col-5">Why</dt><dd class="col-7"><ul class="ps-3 mb-0">${o.reasons.map(r=>'<li>'+CF.esc(r)+'</li>').join('')}</ul></dd>
+ <dt class="col-5">Department</dt><dd class="col-7">${CF.esc(C.department?C.department.name:'—')}</dd><dt class="col-5">Officer</dt><dd class="col-7">${CF.esc(C.assigned_officer?C.assigned_officer.name:'Unassigned')}</dd>
+ <dt class="col-5">SLA deadline</dt><dd class="col-7">${CF.date(C.sla.deadline)}</dd><dt class="col-5">SLA status</dt><dd class="col-7 ${C.sla.is_overdue?'text-danger fw-semibold':''}">${CF.esc(C.sla.status)}</dd>
+ <dt class="col-5">Age</dt><dd class="col-7">${C.age_days} days</dd>${C.prediction?`<dt class="col-5">AI category</dt><dd class="col-7">${CF.esc(C.prediction.category)} (${Math.round((C.prediction.confidence||0)*100)}%)${C.prediction.corrected_by_admin?' · corrected':''}</dd>`:''}
+ ${ROLE!=='citizen'?`<dt class="col-5">Possible duplicates</dt><dd class="col-7">${C.possible_duplicates}</dd>`:''}</dl></div>
+ <div class="cf-card cf-card-b mb-3" id="actions"><h6>Actions</h6></div>
+ <div class="cf-card cf-card-b"><h6>Status timeline</h6><ul class="timeline mb-0">${C.history.map(h=>`<li><strong>${(CF.STATUS[h.new_status]||[h.new_status])[0]}</strong> — ${CF.date(h.created_at)}<br><small class="text-muted">${CF.esc(h.changed_by)}${h.comment?': '+CF.esc(h.comment):''}</small></li>`).join('')||'<li class="text-muted">Not submitted yet.</li>'}</ul></div></div></div>`;
+ if(!gm||!document.getElementById('map')._leaflet_id){gm=CF.map('map',[C.location.latitude,C.location.longitude],16);}
+ L.marker([C.location.latitude,C.location.longitude]).addTo(gm).bindPopup(CF.esc(C.title));
+ up.onclick=async()=>{try{await CF.api(`/complaints/${ID}/upvote/`,{method:C.has_upvoted?'DELETE':'POST'});load()}catch(e){CF.alert(err,CF.errText(e))}};
+ rep.onclick=async()=>{const r=await ask('Report this content');await CF.api(`/complaints/${ID}/report/`,{method:'POST',body:{reason:r.text}});CF.alert(err,'Thanks. An administrator will review this.','success')};
+ const post=async internal=>{try{await CF.api(`/complaints/${ID}/comment/`,{method:'POST',body:{text:ct.value,is_internal:internal}});load()}catch(e){CF.alert(err,CF.errText(e))}};
+ if(window.cs){cs.onclick=()=>post(false);if(window.ci)ci.onclick=()=>post(true)}
+ document.querySelectorAll('.hid').forEach(a=>a.onclick=async e=>{e.preventDefault();await CF.api(`/${a.dataset.k}/${a.dataset.id}/hide/`,{method:'PATCH',body:{hidden:a.dataset.h!=='true'}});load()});
+ const set=(s,c)=>CF.api(`/complaints/${ID}/status/`,{method:'PATCH',body:{status:s,comment:c}});
+ const act=document.getElementById('actions');
+ if(A.can_edit){act.append(btn('btn-primary','Submit complaint',()=>CF.api(`/complaints/${ID}/submit/`,{method:'POST'}),'bi-send'))}
+ if(T.includes('IN_PROGRESS'))act.append(btn('btn-primary',ROLE==='officer'&&C.status==='ASSIGNED'?'Accept assignment':'Mark in progress',()=>set('IN_PROGRESS','Work started'),'bi-tools'));
+ if(T.includes('WAITING_INFO'))act.append(btn('btn-outline-warning','Request information',async()=>{const r=await ask('What information do you need?');if(!r.text)throw {};await CF.api(`/complaints/${ID}/request-info/`,{method:'POST',body:{comment:r.text}})},'bi-question-circle'));
+ if(T.includes('RESOLVED'))act.append(btn('btn-success','Mark resolved',async()=>{const r=await ask('Describe the fix',{evidence:true});if(!r.text)throw {};
+   if(r.file){const fd=new FormData();fd.append('image',r.file);fd.append('is_resolution_evidence','true');fd.append('caption','Resolution evidence');await CF.api(`/complaints/${ID}/images/`,{method:'POST',form:fd})}await CF.api(`/complaints/${ID}/resolve/`,{method:'POST',body:{comment:r.text}})},'bi-check-circle'));
+ if(T.includes('CLOSED'))act.append(btn('btn-success','Confirm it is resolved',()=>CF.api(`/complaints/${ID}/confirm/`,{method:'POST',body:{}}),'bi-check2-circle'));
+ if(T.includes('REOPENED'))act.append(btn('btn-outline-danger','Reopen — still not fixed',async()=>{const r=await ask('Why is it not fixed?');if(!r.text)throw {};await CF.api(`/complaints/${ID}/reopen/`,{method:'POST',body:{comment:r.text}})},'bi-arrow-counterclockwise'));
+ if(T.includes('ASSIGNED')&&C.status==='REOPENED')act.append(btn('btn-primary','Re-assign for work',()=>set('ASSIGNED','Reassigned after reopening'),'bi-person-check'));
+ if(T.includes('ASSIGNED')&&C.status==='UNDER_REVIEW')act.append(btn('btn-primary','Assign to department',()=>set('ASSIGNED','Assigned by administrator'),'bi-person-check'));
+ if(T.includes('REJECTED'))act.append(btn('btn-outline-danger','Reject complaint',async()=>{const r=await ask('Reason for rejection');if(!r.text)throw {};await set('REJECTED',r.text)},'bi-x-circle'));
+ if(A.can_admin){
+  act.append(btn('btn-outline-secondary','Change category / department / officer',async()=>{const cats=await CF.api('/categories/'),deps=await CF.api('/departments/?page_size=50');
+   const r=await ask('Update routing',{fieldsHtml:`<label class="form-label small mt-2">Category</label><select id="xc" class="form-select">${cats.map(c=>`<option value="${c.id}" ${C.category&&C.category.id===c.id?'selected':''}>${CF.esc(c.name)}</option>`).join('')}</select><label class="form-label small mt-2">Department</label><select id="xd" class="form-select">${deps.results.map(d=>`<option value="${d.id}" ${C.department&&C.department.id===d.id?'selected':''}>${CF.esc(d.name)}</option>`).join('')}</select>`});
+   await CF.api(`/complaints/${ID}/`,{method:'PATCH',body:{category:+xc.value,department:+xd.value}})},'bi-signpost-split'));
+  act.append(btn('btn-outline-secondary','Override priority',async()=>{const r=await ask('Override priority',{fieldsHtml:'<label class="form-label small mt-2">New score (0–100)</label><input id="xs" type="number" min="0" max="100" class="form-control">'});
+   await CF.api(`/complaints/${ID}/`,{method:'PATCH',body:{priority_score:+xs.value,priority_override_reason:r.text}})},'bi-flag'));
+  act.append(btn('btn-outline-secondary','Merge duplicates into this',async()=>{const d=await CF.api(`/complaints/${ID}/duplicates/`);
+   const r=await ask('Merge duplicates',{fieldsHtml:d.length?d.map(x=>`<div class="form-check mt-2"><input class="form-check-input mg" type="checkbox" value="${x.complaint.id}" id="m${x.complaint.id}"><label class="form-check-label" for="m${x.complaint.id}">${CF.esc(x.complaint.complaint_number)} — ${CF.esc(x.complaint.title)} (${x.similarity}%)</label></div>`).join(''):'<p class="mt-2 text-muted">No possible duplicates found.</p>'});
+   const ids=[...document.querySelectorAll('.mg:checked')].map(x=>+x.value);if(ids.length)await CF.api(`/complaints/${ID}/merge/`,{method:'POST',body:{duplicate_ids:ids,reason:r.text}})},'bi-diagram-2'));
+ }
+ if(!act.querySelector('button'))act.insertAdjacentHTML('beforeend','<p class="small text-muted mb-0">No actions available right now.</p>');}
+load().catch(e=>{page.innerHTML='';CF.alert(err,e.status===404?'Complaint not found or you do not have access.':CF.errText(e))});
+</script>{% endblock %}

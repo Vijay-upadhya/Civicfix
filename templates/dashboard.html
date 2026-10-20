@@ -1,0 +1,46 @@
+{% extends "base.html" %}{% block title %}Dashboard — CivicFix{% endblock %}{% block content %}
+<div class="container py-4"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="mb-0">{% if role == 'admin' %}Administrator dashboard{% elif role == 'officer' %}Officer dashboard{% else %}Your dashboard{% endif %}</h2>
+{% if role == 'citizen' %}<a class="btn btn-primary" href="/report/"><i class="bi bi-plus-circle"></i> Report Issue</a>{% endif %}</div>
+<div class="row g-3 mb-3" id="cards"></div><div id="pane"></div></div>{% endblock %}
+{% block scripts %}<script>
+const ROLE="{{ role }}";
+const card=(l,v,i,c='primary')=>`<div class="col-6 col-lg"><div class="cf-card cf-card-b"><div class="d-flex justify-content-between"><div class="text-muted small">${l}</div><i class="bi ${i} text-${c}"></i></div><div class="stat" style="color:inherit">${v}</div></div></div>`;
+const panel=(t,inner,col='col-lg-6')=>`<div class="${col}"><div class="cf-card h-100"><div class="cf-card-h">${t}</div><div class="cf-card-b">${inner}</div></div></div>`;
+const queueRow=c=>`<tr><td>${CF.prioBadge(c.priority.level)} <small>${c.priority.score}</small></td><td><a href="/complaints/${c.id}/">${CF.esc(c.complaint_number||'')}</a><br><small>${CF.esc(c.title)}</small></td><td>${CF.esc(c.category?c.category.name:'')}</td><td>${CF.esc(c.location.ward||'')}</td><td>${CF.ago(c.submitted_at)}</td><td class="${c.sla.is_overdue?'text-danger fw-semibold':''}">${CF.esc(c.sla.status)}</td><td>${CF.statusBadge(c.status)}</td><td><a class="btn btn-sm btn-outline-primary" href="/complaints/${c.id}/">Open</a></td></tr>`;
+async function citizen(){
+ const d=await CF.api('/complaints/?mine=true&page_size=500'),all=d.results,n=s=>all.filter(c=>s.includes(c.status)).length;
+ cards.innerHTML=card('Total Reports',all.length,'bi-journal-text')+card('Active Reports',n(['SUBMITTED','UNDER_REVIEW','ASSIGNED','IN_PROGRESS','WAITING_INFO','REOPENED']),'bi-hourglass-split','warning')+card('Resolved Reports',n(['RESOLVED','CLOSED']),'bi-check-circle','success')+card('Reopened Reports',n(['REOPENED']),'bi-arrow-counterclockwise','danger');
+ const act=all.filter(c=>['WAITING_INFO','RESOLVED','DRAFT'].includes(c.status));
+ pane.innerHTML=`<div class="row g-3">${panel('Needs your action',act.length?act.map(CF.card).join(''):'<span class="text-muted">Nothing needs your attention.</span>')}${panel('Complaint status','<canvas id="ch" height="200"></canvas>')}
+ ${panel('Recent complaints',all.slice(0,6).map(CF.card).join('')||'<span class="text-muted">No complaints yet.</span>')}${panel('Nearby issues','<div id="map" class="map"></div>')}</div>`;
+ const st={};all.forEach(c=>st[c.status]=(st[c.status]||0)+1);CF.chart('ch','doughnut',Object.keys(st).map(s=>CF.STATUS[s][0]),Object.values(st),'Complaints');
+ const m=CF.map('map'),nb=await CF.api('/complaints/?page_size=200');CF.markers(m,nb.results.map(CF.fromComplaint));}
+async function officer(){
+ const o=await CF.api('/analytics/overview/');
+ cards.innerHTML=card('New Complaints',o.new_complaints,'bi-inbox')+card('Assigned to Me',o.assigned_to_me,'bi-person-check')+card('In Progress',o.in_progress,'bi-tools','warning')+card('Overdue',o.overdue_complaints,'bi-alarm','danger')+card('Resolved This Month',o.resolved_this_month,'bi-check-circle','success');
+ const [q,cat,dep,ov]=await Promise.all([CF.api('/complaints/?ordering=-priority_score&page_size=200'),CF.api('/analytics/by-category/'),CF.api('/analytics/by-department/'),null]);
+ const open=q.results.filter(c=>!['CLOSED','MERGED','REJECTED','RESOLVED'].includes(c.status)).slice(0,12);
+ const recent=[...q.results].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,5);
+ let dept=null;const me=await CF.api('/auth/me/');if(me.department)dept=await CF.api('/departments/'+me.department.id+'/analytics/');
+ pane.innerHTML=`<div class="row g-3">${panel('Priority queue',`<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Priority</th><th>Complaint</th><th>Category</th><th>Area</th><th>Age</th><th>SLA</th><th>Status</th><th></th></tr></thead><tbody>${open.map(queueRow).join('')||'<tr><td colspan=8 class="text-muted">The queue is empty.</td></tr>'}</tbody></table></div>`,'col-12')}
+ ${panel('Complaint map','<div id="map" class="map"></div>')}${panel('Complaints by category','<canvas id="c1" height="200"></canvas>')}
+ ${panel('SLA performance',dep.map(d=>`<div class="d-flex justify-content-between"><span>${CF.esc(d.department)}</span><strong>${d.sla_compliance}% on time · ${d.overdue} overdue</strong></div>`).join('')||'—')}
+ ${panel('Department workload',dept?dept.workload.map(w=>`<div class="d-flex justify-content-between"><span>${CF.esc(w.name)}</span><strong>${w.open} open</strong></div>`).join('')+`<div class="text-muted mt-2">Unassigned open: ${dept.unassigned_open}</div>`:'—')}
+ ${panel('Recent status changes',recent.map(c=>`<div class="mb-1"><a href="/complaints/${c.id}/">${CF.esc(c.complaint_number)}</a> ${CF.statusBadge(c.status)}</div>`).join(''),'col-12')}</div>`;
+ CF.markers(CF.map('map'),q.results.map(CF.fromComplaint));CF.chart('c1','bar',cat.map(c=>c.category),cat.map(c=>c.total),'Complaints');}
+async function admin(){
+ const [o,cat,dep,ward,rt,logs,users]=await Promise.all([CF.api('/analytics/overview/'),CF.api('/analytics/by-category/'),CF.api('/analytics/by-department/'),CF.api('/analytics/by-ward/'),CF.api('/analytics/resolution-time/'),CF.api('/audit-logs/'),CF.api('/users/?page_size=8')]);
+ cards.innerHTML=card('Total users',o.total_users,'bi-people')+card('Complaints today',o.complaints_today,'bi-calendar-day')+card('Open complaints',o.open_complaints,'bi-folder2-open','warning')+card('Resolved complaints',o.resolved_complaints,'bi-check-circle','success')+card('Overdue',o.overdue_complaints,'bi-alarm','danger');
+ const dr=o.duplicate_reduction,pa=o.prediction_accuracy;
+ pane.innerHTML=`<div class="row g-3 mb-3">${card('Resolution rate',o.resolution_rate+'%','bi-percent')}${card('Avg resolution time',o.average_resolution_hours==null?'—':o.average_resolution_hours+' h','bi-stopwatch')}${card('SLA compliance',o.sla_compliance+'%','bi-shield-check','success')}${card('Reopen rate',o.reopen_rate+'%','bi-arrow-counterclockwise','danger')}${card('Prediction accuracy',pa.accuracy+'%','bi-cpu')}</div>
+ <div class="row g-3">${panel('Category distribution','<canvas id="c1" height="220"></canvas>')}${panel('Department comparison','<canvas id="c2" height="220"></canvas>')}
+ ${panel('Ward-level issue map','<div id="map" class="map"></div>')}${panel('Closed per day (last 30 days)','<canvas id="c3" height="220"></canvas>')}
+ ${panel('Duplicate reduction',`<p class="mb-1"><strong>${dr.total_complaints}</strong> reports were submitted, representing <strong>${dr.unique_issue_groups}</strong> unique civic issues.</p><p class="text-muted mb-0">${dr.merged_duplicates} merged duplicates (${dr.estimated_reduction_pct}% reduction).</p>`)}
+ ${panel('Prediction accuracy',`<p class="mb-1">${pa.correct} of ${pa.evaluated} predictions matched the final category (${pa.accuracy}%). ${pa.corrected_by_admin} corrected by administrators. Average confidence ${pa.average_confidence}.</p><small class="text-muted">Trained on a synthetic dataset; see README.</small>`)}
+ ${panel('Audit activity',`<div class="table-responsive"><table class="table table-sm"><tbody>${logs.results.slice(0,10).map(a=>`<tr><td>${CF.ago(a.created_at)}</td><td>${CF.esc(a.actor)}</td><td>${CF.esc(a.action)}</td><td>${CF.esc(a.entity_type)} #${CF.esc(a.entity_id)}</td></tr>`).join('')}</tbody></table></div>`)}
+ ${panel('Users',`<div class="table-responsive"><table class="table table-sm"><tbody>${users.results.map(u=>`<tr><td>${CF.esc(u.email)}</td><td>${CF.esc(u.role)}</td></tr>`).join('')}</tbody></table></div><a href="/admin/accounts/userprofile/">Manage users, roles and departments</a>`)}</div>`;
+ CF.chart('c1','doughnut',cat.map(c=>c.category),cat.map(c=>c.total),'Complaints');CF.chart('c2','bar',dep.map(d=>d.department),dep.map(d=>d.overdue),'Overdue');
+ CF.chart('c3','line',rt.closed_per_day.map(d=>d.date),rt.closed_per_day.map(d=>d.count),'Closed');
+ const m=CF.map('map');ward.forEach(w=>L.circleMarker([w.latitude,w.longitude],{radius:8+w.total/3,color:'#2563EB',fillOpacity:.4}).addTo(m).bindPopup(`${CF.esc(w.ward)}<br>${w.total} complaints, ${w.open} open`));}
+({citizen,officer,admin}[ROLE]||citizen)().catch(e=>{pane.innerHTML='<div class="alert alert-danger">'+CF.esc(CF.errText(e))+'</div>'});
+</script>{% endblock %}

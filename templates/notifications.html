@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block content %}<div class="container py-4" style="max-width:800px"><div class="d-flex justify-content-between mb-3"><h2>Notifications</h2><button id="all" class="btn btn-outline-secondary btn-sm">Mark all as read</button></div><div id="list" class="cf-card"></div></div>{% endblock %}
+{% block scripts %}<script>
+async function load(){const d=await CF.api('/notifications/?page_size=100');
+ list.innerHTML=d.results.map(n=>`<div class="p-3 border-bottom ${n.is_read?'':'bg-light'}"><div class="d-flex justify-content-between"><strong>${n.is_read?'':'<i class="bi bi-circle-fill text-primary me-1" style="font-size:.5rem"></i>'}${CF.esc(n.title)}</strong><small class="text-muted">${CF.ago(n.created_at)}</small></div><div>${CF.esc(n.message)}</div>${n.complaint_id?`<a class="small" href="/complaints/${n.complaint_id}/" data-id="${n.id}">View complaint</a>`:''}</div>`).join('')||'<div class="p-4 text-muted">No notifications yet.</div>';
+ list.querySelectorAll('a[data-id]').forEach(a=>a.onclick=()=>CF.api('/notifications/'+a.dataset.id+'/read/',{method:'PATCH'}));}
+all.onclick=async()=>{await CF.api('/notifications/mark-all-read/',{method:'POST'});load()};load();
+</script>{% endblock %}

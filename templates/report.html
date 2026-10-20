@@ -1,0 +1,76 @@
+{% extends "base.html" %}{% block title %}Report an issue — CivicFix{% endblock %}{% block content %}
+<div class="container py-4" style="max-width:900px"><h2>Report an issue</h2>
+<div class="steps" id="steps"><span>1 Issue type</span><span>2 Details</span><span>3 Location</span><span>4 Evidence</span><span>5 Review</span></div><div id="err"></div>
+<div class="cf-card cf-card-b">
+<section data-step="1"><h5>What kind of issue is it?</h5><div class="row g-2" id="cats"></div></section>
+<section data-step="2" class="d-none"><div class="row g-3">
+<div class="col-12"><label class="form-label">Complaint title *</label><input id="title" class="form-control" maxlength="200" placeholder="Large pothole near the metro entrance"></div>
+<div class="col-12"><label class="form-label">Detailed description * <small class="text-muted">(at least 20 characters)</small></label><textarea id="desc" rows="4" class="form-control"></textarea></div>
+<div class="col-md-6"><label class="form-label">Landmark</label><input id="landmark" class="form-control"></div>
+<div class="col-md-3"><label class="form-label">People affected</label><input id="affected" type="number" min="0" value="0" class="form-control"></div>
+<div class="col-md-3"><label class="form-label">Contact preference</label><input id="contact" class="form-control" placeholder="Optional"></div>
+<div class="col-12 form-check ms-2"><input type="checkbox" class="form-check-input" id="safety"><label class="form-check-label" for="safety"><i class="bi bi-exclamation-triangle text-warning"></i> This is a safety risk</label></div></div></section>
+<section data-step="3" class="d-none"><div class="d-flex flex-wrap gap-2 mb-2"><button type="button" class="btn btn-outline-primary" id="loc"><i class="bi bi-crosshair"></i> Use current location</button>
+<div class="input-group" style="max-width:420px"><input id="addrq" class="form-control" placeholder="Enter an address"><button type="button" class="btn btn-outline-secondary" id="addrgo">Find</button></div></div>
+<div id="map" class="map"></div><div class="small mt-2"><strong>Selected:</strong> <span id="coords" class="text-muted">Click the map to place a pin (you can drag it).</span></div>
+<div class="row g-2 mt-1"><div class="col-md-8"><label class="form-label small">Approximate address</label><input id="addr" class="form-control"></div><div class="col-md-4"><label class="form-label small">Ward</label><input id="ward" class="form-control"></div></div></section>
+<section data-step="4" class="d-none"><p class="text-muted">Up to 3 images (JPG or PNG, max 5 MB each). Optional but helpful.</p><input type="file" id="files" accept=".jpg,.jpeg,.png,image/jpeg,image/png" multiple class="form-control"><div id="prev" class="row g-2 mt-2"></div></section>
+<section data-step="5" class="d-none"><div id="review"></div></section>
+<div class="d-flex justify-content-between mt-4"><button class="btn btn-outline-secondary" id="back">Back</button><button class="btn btn-primary" id="next">Next</button></div></div></div>{% endblock %}
+{% block scripts %}<script>
+let step=1,S={category:null,lat:null,lng:null,files:[]},gmap,pin,nearLayer,rev=null,dupChoice=false;
+const cats={};
+CF.api('/categories/').then(list=>{list.forEach(c=>cats[c.id]=c);
+ document.getElementById('cats').innerHTML=list.filter(c=>c.slug!=='other').concat(list.filter(c=>c.slug==='other')).map(c=>`<div class="col-6 col-md-4"><div class="cat-card" data-id="${c.id}"><i class="bi ${CF.esc(c.icon)}"></i><div class="fw-semibold">${CF.esc(c.name)}</div><small class="text-muted">${CF.esc(c.description)}</small></div></div>`).join('')+
+ `<div class="col-6 col-md-4"><div class="cat-card" data-id=""><i class="bi bi-patch-question"></i><div class="fw-semibold">I am not sure</div><small class="text-muted">We will classify it from your description.</small></div></div>`;
+ document.querySelectorAll('.cat-card').forEach(el=>el.onclick=()=>{document.querySelectorAll('.cat-card').forEach(x=>x.classList.remove('active'));el.classList.add('active');S.category=el.dataset.id||null;S.picked=true})});
+function show(){document.querySelectorAll('section[data-step]').forEach(s=>s.classList.toggle('d-none',+s.dataset.step!==step));
+ [...steps.children].forEach((s,i)=>s.classList.toggle('on',i+1<=step));back.style.visibility=step===1?'hidden':'visible';
+ document.getElementById('next').textContent=step===5?'Submit complaint':'Next';
+ if(step===3)initMap();if(step===5)buildReview()}
+function initMap(){if(!gmap){gmap=CF.map('map',[12.9352,77.6245],13);gmap.on('click',e=>place(e.latlng.lat,e.latlng.lng,true))}setTimeout(()=>gmap.invalidateSize(),50)}
+async function place(lat,lng,geocode){S.lat=+lat.toFixed(6);S.lng=+lng.toFixed(6);
+ if(!pin){pin=L.marker([lat,lng],{draggable:true}).addTo(gmap);pin.on('dragend',()=>{const p=pin.getLatLng();place(p.lat,p.lng,true)})}else pin.setLatLng([lat,lng]);
+ coords.textContent=`Latitude ${S.lat}, Longitude ${S.lng}`;
+ try{const near=await CF.api(`/complaints/?near_lat=${lat}&near_lng=${lng}&radius=400&page_size=50`);if(nearLayer)nearLayer.remove();nearLayer=L.layerGroup(near.results.map(c=>CF.marker({lat:c.location.latitude,lng:c.location.longitude,prio:c.priority.level},c.status).bindPopup(CF.esc(c.title)))).addTo(gmap);
+  if(window.dupCircle)dupCircle.remove();window.dupCircle=L.circle([lat,lng],{radius:200,color:'#D97706',fill:false,dashArray:'4'}).addTo(gmap)}catch(e){}
+ if(geocode&&await CF.consent.get()){try{const g=await CF.geocode.reverse(lat,lng);addr.value=g.address;ward.value=ward.value||g.ward}catch(e){}}}
+loc.onclick=async()=>{try{const c=await CF.locate();err.innerHTML='';gmap.setView([c.latitude,c.longitude],16);place(c.latitude,c.longitude,true)}catch(e){CF.alert(err,CF.geoError(e),'warning')}};
+addrgo.onclick=async()=>{if(!(await CF.consent.ensure())){CF.alert(err,'Address search needs location features. Click the map to place a pin instead.','warning');return}
+ try{const r=await CF.geocode.search(addrq.value);if(r){gmap.setView([r.lat,r.lng],16);addr.value=r.address;place(r.lat,r.lng,false)}else CF.alert(err,'Address not found.')}catch(e){CF.alert(err,'Address search failed. Click the map to place a pin instead.','warning')}};
+files.onchange=()=>{S.files=[...files.files];err.innerHTML='';
+ for(const f of S.files){if(!/\.(jpe?g|png)$/i.test(f.name)){CF.alert(err,'Only JPG and PNG images are allowed.');S.files=[];files.value='';break}if(f.size>5*1024*1024){CF.alert(err,'Each image must be 5 MB or smaller.');S.files=[];files.value='';break}}
+ if(S.files.length>3){CF.alert(err,'A maximum of 3 images is allowed.');S.files=[];files.value=''}
+ prev.innerHTML=S.files.map((f,i)=>`<div class="col-4"><img class="img-fluid rounded border" src="${URL.createObjectURL(f)}"><input class="form-control form-control-sm mt-1 cap" placeholder="Caption" data-i="${i}"></div>`).join('')};
+function validate(){err.innerHTML='';
+ if(step===1&&!S.picked)return 'Choose an issue type, or "I am not sure".';
+ if(step===2){if(title.value.trim().length<5)return 'Title must contain at least 5 characters.';if(desc.value.trim().length<20)return 'Description must contain at least 20 characters.';if(+affected.value<0)return 'Affected people must be zero or more.'}
+ if(step===3&&S.lat===null)return 'Please select a location on the map.';return null}
+async function buildReview(){review.innerHTML='<div class="text-muted">Analysing your report…</div>';
+ const body={title:title.value,description:desc.value,latitude:S.lat,longitude:S.lng,category:S.category,landmark:landmark.value};
+ try{const [cl,du]=await Promise.all([CF.api('/intelligence/classify/',{method:'POST',body}),CF.api('/intelligence/check-duplicates/',{method:'POST',body})]);
+  const cat=S.category?cats[S.category]:cl.category,dept=S.category?{name:cats[S.category].department_name}:cl.department;
+  const pr=await CF.api('/intelligence/calculate-priority/',{method:'POST',body:{...body,category:cat&&cat.id,severity:cat&&cats[cat.id]?cats[cat.id].default_severity:'MEDIUM',safety_risk:safety.checked,affected_people:+affected.value||0}});
+  const sla=cat&&cats[cat.id]?(safety.checked?Math.min(24,cats[cat.id].sla_hours):cats[cat.id].sla_hours):240;
+  review.innerHTML=`<h5>Review before submitting</h5><dl class="row"><dt class="col-sm-3">Category</dt><dd class="col-sm-9">${CF.esc(cat?cat.name:'Not sure')} ${S.category?'':'<span class="text-muted">(suggested)</span>'}</dd>
+  <dt class="col-sm-3">Title</dt><dd class="col-sm-9">${CF.esc(title.value)}</dd><dt class="col-sm-3">Description</dt><dd class="col-sm-9">${CF.esc(desc.value)}</dd>
+  <dt class="col-sm-3">Location</dt><dd class="col-sm-9">${CF.esc(addr.value||'')} (${S.lat}, ${S.lng}) ${CF.esc(ward.value)}</dd><dt class="col-sm-3">Images</dt><dd class="col-sm-9">${S.files.length}</dd>
+  <dt class="col-sm-3">Suggested department</dt><dd class="col-sm-9">${CF.esc(dept?dept.name:'General Review Department')}${cl.low_confidence&&!S.category?' <span class="badge bg-warning text-dark">Low confidence — goes to General Review</span>':''}</dd>
+  <dt class="col-sm-3">Prediction</dt><dd class="col-sm-9 small text-muted">${CF.esc(cl.explanation)}${cl.top_two.length>1&&cl.low_confidence?' Other possibility: '+CF.esc(cl.top_two[1].name):''}</dd>
+  <dt class="col-sm-3">Predicted priority</dt><dd class="col-sm-9">${CF.prioBadge(pr.level)} (${pr.score}/100)<ul class="small mb-0">${pr.reasons.map(r=>'<li>'+CF.esc(r)+'</li>').join('')}</ul></dd>
+  <dt class="col-sm-3">Safety risk</dt><dd class="col-sm-9">${safety.checked?'Yes':'No'}</dd><dt class="col-sm-3">SLA estimate</dt><dd class="col-sm-9">${sla} hours</dd></dl>
+  ${du.count?`<div class="alert alert-warning"><strong>We found ${du.count} similar report${du.count>1?'s':''} near this location.</strong><ul class="list-unstyled mb-0 mt-2">${du.results.map(d=>`<li class="mb-2">${CF.esc(d.complaint_number)} — ${CF.esc(d.title)} <span class="badge bg-secondary">${d.similarity}% similar</span><br><a class="btn btn-sm btn-outline-primary" target="_blank" href="/complaints/${d.id}/">View existing report</a> <button class="btn btn-sm btn-outline-success up" data-id="${d.id}">Upvote existing report</button></li>`).join('')}</ul><div class="mt-2"><button class="btn btn-sm btn-primary" id="sep">Submit separate report</button> <a class="btn btn-sm btn-outline-secondary" href="/dashboard/">Cancel</a></div></div>`:''}
+  <div class="d-flex gap-2"><button class="btn btn-outline-secondary" id="edit">Edit complaint</button><button class="btn btn-outline-primary" id="draft">Save as draft</button></div>`;
+  document.getElementById('edit').onclick=()=>{step=2;show()};document.getElementById('draft').onclick=()=>save(false);
+  const sep=document.getElementById('sep');if(sep)sep.onclick=()=>{dupChoice=true;sep.textContent='Separate report chosen ✓'};
+  review.querySelectorAll('.up').forEach(b=>b.onclick=async()=>{try{await CF.api(`/complaints/${b.dataset.id}/upvote/`,{method:'POST'});b.textContent='Upvoted ✓';b.disabled=true}catch(e){CF.alert(err,CF.errText(e))}});
+ }catch(e){review.innerHTML='';CF.alert(err,CF.errText(e))}}
+async function save(submit){const b=document.getElementById('next');b.disabled=true;
+ try{const c=await CF.api('/complaints/',{method:'POST',body:{title:title.value.trim(),description:desc.value.trim(),category:S.category?+S.category:null,latitude:S.lat,longitude:S.lng,address:addr.value,ward:ward.value,landmark:landmark.value,contact_preference:contact.value,safety_risk:safety.checked,affected_people:+affected.value||0}});
+  const caps=[...document.querySelectorAll('.cap')];
+  for(let i=0;i<S.files.length;i++){const fd=new FormData();fd.append('image',S.files[i]);fd.append('caption',caps[i]?caps[i].value:'');await CF.api(`/complaints/${c.id}/images/`,{method:'POST',form:fd})}
+  if(submit)await CF.api(`/complaints/${c.id}/submit/`,{method:'POST'});location='/complaints/'+c.id+'/'}
+ catch(e){CF.alert(err,CF.errText(e));b.disabled=false}}
+document.getElementById('next').onclick=()=>{const v=validate();if(v){CF.alert(err,v);return}if(step===5)return save(true);step++;show()};
+back.onclick=()=>{step--;show()};show();
+</script>{% endblock %}

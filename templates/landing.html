@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% block content %}
+<section class="hero py-5"><div class="container py-3"><div class="row align-items-center"><div class="col-lg-7">
+  <h1 class="display-5">Make your neighbourhood better, one report at a time.</h1>
+  <p class="lead text-muted">Report civic problems, follow their progress, and help your community identify issues that need attention.</p>
+  <div class="d-flex gap-2 flex-wrap"><a class="btn btn-primary btn-lg" href="/report/"><i class="bi bi-plus-circle"></i> Report an Issue</a>
+  <a class="btn btn-outline-primary btn-lg" href="/explore/">Explore Open Issues</a></div></div>
+  <div class="col-lg-5 mt-4 mt-lg-0"><div class="cf-card cf-card-b"><div class="row text-center g-3" id="stats"></div><div class="text-center mt-2"><span class="demo-tag d-none" id="demo">Demo statistics</span></div></div></div></div></div></section>
+<section class="container py-5" id="how"><h2 class="text-center mb-4">How it works</h2><div class="row g-3">
+<div class="col-md-3"><div class="cf-card cf-card-b h-100"><div class="stat">1</div><h5>Report an issue</h5><p class="text-muted mb-0">Pick a category, describe the problem, drop a pin and add photos.</p></div></div>
+<div class="col-md-3"><div class="cf-card cf-card-b h-100"><div class="stat">2</div><h5>Our system routes it</h5><p class="text-muted mb-0">The right department is chosen automatically and similar reports are flagged.</p></div></div>
+<div class="col-md-3"><div class="cf-card cf-card-b h-100"><div class="stat">3</div><h5>Track the progress</h5><p class="text-muted mb-0">Follow a clear status timeline with deadlines and updates.</p></div></div>
+<div class="col-md-3"><div class="cf-card cf-card-b h-100"><div class="stat">4</div><h5>Confirm the resolution</h5><p class="text-muted mb-0">Confirm it is fixed, or reopen it if it is not.</p></div></div></div></section>
+<section class="container pb-4"><h2 class="text-center mb-4">Features</h2><div class="row g-3">
+<div class="col-md-4"><div class="cf-card cf-card-b h-100"><i class="bi bi-lightning-charge fs-3 text-primary"></i><h5 class="mt-2">Easy reporting</h5><p class="text-muted mb-0">A guided five-step form works on any phone.</p></div></div>
+<div class="col-md-4"><div class="cf-card cf-card-b h-100"><i class="bi bi-geo-alt fs-3 text-primary"></i><h5 class="mt-2">Location-based complaints</h5><p class="text-muted mb-0">Every report is pinned on an OpenStreetMap map.</p></div></div>
+<div class="col-md-4"><div class="cf-card cf-card-b h-100"><i class="bi bi-signpost-2 fs-3 text-primary"></i><h5 class="mt-2">Intelligent department routing</h5><p class="text-muted mb-0">A TF-IDF model suggests the category and department, with confidence shown.</p></div></div>
+<div class="col-md-4"><div class="cf-card cf-card-b h-100"><i class="bi bi-diagram-2 fs-3 text-primary"></i><h5 class="mt-2">Duplicate detection</h5><p class="text-muted mb-0">Nearby similar reports are shown before you submit.</p></div></div>
+<div class="col-md-4"><div class="cf-card cf-card-b h-100"><i class="bi bi-clock-history fs-3 text-primary"></i><h5 class="mt-2">Transparent tracking</h5><p class="text-muted mb-0">Status history and SLA deadlines are visible to everyone.</p></div></div>
+<div class="col-md-4"><div class="cf-card cf-card-b h-100"><i class="bi bi-bar-chart fs-3 text-primary"></i><h5 class="mt-2">Public accountability</h5><p class="text-muted mb-0">Priority scores come with plain-language reasons.</p></div></div></div></section>
+<section class="container py-4"><h2 class="mb-3">Featured map <span class="demo-tag d-none" id="demo2">Demo complaints</span></h2><div id="map" class="map map-lg"></div></section>
+{% endblock %}
+{% block scripts %}<script>
+CF.api('/public/stats/').then(d=>{
+ document.getElementById('stats').innerHTML=[['Issues Reported',d.issues_reported],['Issues Resolved',d.issues_resolved],['Active Departments',d.active_departments],['Citizen Satisfaction',d.demo?'92%':'—']].map(([l,v])=>`<div class="col-6"><div class="stat">${v}</div><div class="small text-muted">${l}</div></div>`).join('');
+ if(d.demo){demo.classList.remove('d-none');demo2.classList.remove('d-none')}
+ if(!d.markers_public){document.getElementById('map').innerHTML='<div class="d-flex h-100 align-items-center justify-content-center text-muted p-4 text-center">The complaint map is available to logged-in users. <a class="ms-1" href="/login/">Log in</a></div>';return}
+ const m=CF.map('map');CF.markers(m,d.markers.map(x=>({id:x.id,number:x.complaint_number,title:x.title,prio:x.priority_level,status:x.status,ward:x.ward,lat:x.latitude,lng:x.longitude})));
+});
+if(location.hash==='#how')document.getElementById('how').scrollIntoView();
+</script>{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}Log in — CivicFix{% endblock %}{% block content %}
+<div class="container py-5" style="max-width:440px"><div class="cf-card cf-card-b">
+<h3>Log in</h3>
+{% for m in messages %}<div class="alert alert-danger py-2">{{ m }}</div>{% endfor %}
+<form method="post">{% csrf_token %}
+<label class="form-label mt-2">Email</label><input class="form-control" type="email" name="email" required autofocus>
+<label class="form-label mt-2">Password</label><input class="form-control" type="password" name="password" required>
+<button class="btn btn-primary w-100 mt-3">Log in</button></form>
+{% if social_providers %}<div class="text-center text-muted small my-3">or</div>
+{% if "google" in social_providers %}<form method="post" action="{% url 'google_login' %}" class="mb-2">{% csrf_token %}<input type="hidden" name="process" value="login"><button class="btn btn-outline-secondary w-100"><i class="bi bi-google"></i> Continue with Google</button></form>{% endif %}
+{% if "facebook" in social_providers %}<form method="post" action="{% url 'facebook_login' %}" class="mb-2">{% csrf_token %}<input type="hidden" name="process" value="login"><button class="btn w-100" style="background:#1877F2;color:#fff"><i class="bi bi-facebook"></i> Continue with Facebook</button></form>{% endif %}
+{% if "twitter_oauth2" in social_providers %}<form method="post" action="{% url 'twitter_oauth2_login' %}" class="mb-2">{% csrf_token %}<input type="hidden" name="process" value="login"><button class="btn btn-dark w-100"><i class="bi bi-twitter-x"></i> Continue with X</button></form>{% endif %}
+<p class="small text-muted mb-0">By continuing you accept the <a href="/privacy/">privacy policy</a>. New accounts are created as citizens.</p>{% endif %}
+<p class="small text-muted mt-3 mb-1">New here? <a href="/register/">Create an account</a></p>
+<details class="small text-muted"><summary>Demo accounts</summary>citizen@example.com · officer@example.com · admin@example.com<br>Password: DemoPassword123 (demo only)</details>
+</div></div>{% endblock %}

@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: civicfix
+      POSTGRES_USER: civicfix
+      POSTGRES_PASSWORD: civicfix
+    volumes: [pgdata:/var/lib/postgresql/data]
+  web:
+    build: .
+    depends_on: [db]
+    ports: ["8000:8000"]
+    environment:
+      SECRET_KEY: local-compose-secret-change-me-please
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      DATABASE_URL: postgres://civicfix:civicfix@db:5432/civicfix
+      SECURE_SSL_REDIRECT: "False"
+    volumes: [media:/app/media]
+volumes:
+  pgdata:
+  media:

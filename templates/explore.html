@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% block title %}Explore issues — CivicFix{% endblock %}{% block content %}
+<div class="container py-4"><div class="d-flex justify-content-between flex-wrap gap-2 mb-3"><h2 class="mb-0">Explore issues</h2>
+<div class="btn-group" role="group"><button class="btn btn-outline-primary active" id="bl"><i class="bi bi-list"></i> List</button><button class="btn btn-outline-primary" id="bm"><i class="bi bi-map"></i> Map</button></div></div>
+{% if not user.is_authenticated %}<div class="alert alert-info">Please <a href="/login/?next=/explore/">log in</a> or <a href="/register/">register</a> to browse public complaints.</div>{% else %}
+<div class="cf-card cf-card-b mb-3"><div class="row g-2">
+<div class="col-md-4"><input id="q" class="form-control" placeholder="Search title, number, landmark"></div>
+<div class="col-6 col-md-2"><select id="cat" class="form-select"><option value="">All categories</option></select></div>
+<div class="col-6 col-md-2"><select id="st" class="form-select"><option value="">Any status</option><option>ASSIGNED</option><option>IN_PROGRESS</option><option>WAITING_INFO</option><option>RESOLVED</option><option>CLOSED</option><option>REOPENED</option></select></div>
+<div class="col-6 col-md-2"><select id="pr" class="form-select"><option value="">Any priority</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></div>
+<div class="col-6 col-md-2"><input id="ward" class="form-control" placeholder="Ward"></div>
+<div class="col-6 col-md-3"><input id="df" type="date" class="form-control" title="From date"></div>
+<div class="col-6 col-md-3"><select id="ord" class="form-select"><option value="-created_at">Newest</option><option value="-upvotes_count">Most upvoted</option><option value="-priority_score">Highest priority</option><option value="nearest">Nearest to me</option></select></div>
+<div class="col-12 col-md-3"><button id="go" class="btn btn-primary w-100">Apply filters</button></div></div></div>
+<div id="list" class="cf-card"></div><div id="map" class="map map-lg d-none"></div>
+<div class="d-flex justify-content-between mt-3"><button id="prev" class="btn btn-outline-secondary">Previous</button><span id="pg" class="text-muted"></span><button id="next" class="btn btn-outline-secondary">Next</button></div>{% endif %}</div>{% endblock %}
+{% block scripts %}{% if user.is_authenticated %}<script>
+let page=1,mode='list',gmap,layer,pos=null,total=0;
+CF.api('/categories/').then(c=>c.forEach(x=>cat.insertAdjacentHTML('beforeend',`<option value="${x.id}">${CF.esc(x.name)}</option>`)));
+async function load(){const p=new URLSearchParams({page,page_size:mode==='map'?200:10,ordering:ord.value});
+ if(q.value)p.set('search',q.value);if(cat.value)p.set('category',cat.value);if(st.value)p.set('status',st.value);if(pr.value)p.set('priority',pr.value);if(ward.value)p.set('ward',ward.value);if(df.value)p.set('date_from',df.value);
+ if(ord.value==='nearest'){if(!pos){try{pos=await CF.locate()}catch(e){CF.alert(list,CF.geoError(e),'warning');ord.value='-created_at';return}}p.set('lat',pos.latitude);p.set('lng',pos.longitude)}
+ const d=await CF.api('/complaints/?'+p);total=d.count;
+ list.innerHTML=d.results.map(CF.card).join('')||'<div class="p-4 text-muted">No complaints match these filters.</div>';
+ pg.textContent=`Page ${page} · ${d.count} complaints`;prev.disabled=!d.previous;next.disabled=!d.next;
+ if(mode==='map'){if(!gmap)gmap=CF.map('map');layer=CF.markers(gmap,d.results.map(CF.fromComplaint),layer);setTimeout(()=>gmap.invalidateSize(),50)}}
+go.onclick=()=>{page=1;load()};prev.onclick=()=>{page--;load()};next.onclick=()=>{page++;load()};
+bl.onclick=()=>{mode='list';list.classList.remove('d-none');document.getElementById('map').classList.add('d-none');bl.classList.add('active');bm.classList.remove('active');load()};
+bm.onclick=()=>{mode='map';list.classList.add('d-none');document.getElementById('map').classList.remove('d-none');bm.classList.add('active');bl.classList.remove('active');load()};
+load();</script>{% endif %}{% endblock %}
